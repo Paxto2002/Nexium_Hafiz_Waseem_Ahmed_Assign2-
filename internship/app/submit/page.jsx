@@ -14,25 +14,27 @@ export default function SubmitBlogPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!url.trim()) {
-      toast.error("🚫 Please enter a valid blog URL.");
+    // ✅ Basic client-side check
+    if (!url.trim() || !/^https?:\/\//.test(url.trim())) {
+      toast.error("🚫 Please enter a valid blog URL starting with http:// or https://");
       return;
     }
 
     setLoading(true);
+    console.log("📤 Submitting blog URL:", url);
 
     try {
-      // ✅ Submit to unified backend
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blogUrl: url }),
+        body: JSON.stringify({ blogUrl: url.trim() }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(`❌ ${data.error}`);
+        console.error("❌ Server response error:", data);
+        toast.error(`❌ ${data.error || "Failed to submit blog."}`);
         return;
       }
 
