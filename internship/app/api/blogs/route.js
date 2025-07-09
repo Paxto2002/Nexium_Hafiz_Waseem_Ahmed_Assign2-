@@ -1,18 +1,11 @@
-// app/api/blogs/route.js
 export const runtime = "nodejs";
 
 import { MongoClient } from "mongodb";
 import { NextResponse } from "next/server";
-import { generateSummary } from "@/lib/generateSummary";
-import { translateToUrdu } from "@/lib/translateToUrdu";
-import { createClient } from "@supabase/supabase-js";
+import { scrapeBlogText } from "@/lib/scraper";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let cachedClient = null;
 async function getMongoClient() {
@@ -20,54 +13,25 @@ async function getMongoClient() {
   const client = new MongoClient(MONGODB_URI);
   await client.connect();
   cachedClient = client;
-  return cachedClient;
-}
-
-// Auto scrape using Playwright
-async function scrapeBlogText(url, browserType = "chromium") {
-  const playwright = await import("playwright");
-
-  const browser = await playwright[browserType].launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const page = await browser.newPage();
-
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await page.waitForSelector("article, main, body", { timeout: 10000 });
-
-    const { title, content } = await page.evaluate(() => {
-      const title = document.title?.trim() || "Untitled";
-      const el =
-        document.querySelector("article") ||
-        document.querySelector("main") ||
-        document.querySelector("body");
-
-      const content = el?.innerText?.replace(/\s+/g, " ").trim() || "";
-
-      return { title, content };
-    });
-
-    await browser.close();
-
-    if (!content || content.length < 100)
-      throw new Error("Not enough blog content extracted.");
-
-    return { title, content };
-  } catch (error) {
-    await browser.close();
-    console.error("❌ Scraper error:", error);
-    return null;
-  }
+  return client;
 }
 
 export async function POST(req) {
   try {
-    const { blogUrl } = await req.json();
+    let blogUrl;
+    try {
+      const body = await req.json();
+      blogUrl = body.blogUrl;
+    } catch (err) {
+      console.error("❌ Invalid JSON body:", err);
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
     if (!/^https?:\/\//.test(blogUrl)) {
-      return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid URL format" },
+        { status: 400 }
+      );
     }
 
     const client = await getMongoClient();
@@ -83,42 +47,38 @@ export async function POST(req) {
     }
 
     const scraped = await scrapeBlogText(blogUrl);
-    if (!scraped) {
-      return NextResponse.json({ error: "Scrape failed" }, { status: 400 });
+
+    if (!scraped || !scraped.content || scraped.content.length < 100) {
+      console.error("❌ Scraping failed or content too short:", scraped);
+      return NextResponse.json(
+        {
+          error:
+            "Scraping failed — the page may be dynamic or has no readable text.",
+        },
+        { status: 400 }
+      );
     }
 
     const { title, content } = scraped;
 
-    // Save in MongoDB
     await col.insertOne({
       blogUrl,
-      blogTitle: title,
+      blogTitle: title || "Untitled",
       blogText: content,
       createdAt: new Date(),
     });
 
-    // 🧠 Generate summary
-    const summary_en = generateSummary(content);
-    const summary_ur = translateToUrdu(summary_en);
-
-    // Save in Supabase
-    const { error } = await supabase.from("summaries").insert({
-      blog_url: blogUrl,
-      summary_en,
-      summary_ur,
-    });
-
-    if (error) throw error;
-
     return NextResponse.json({
-      message: "Scraped + Summarized + Translated",
+      message: "✅ Blog saved to MongoDB",
       blogText: content,
-      summary_en,
-      summary_ur,
+      alreadyExists: false,
     });
   } catch (err) {
-    console.error("❌ /api/blogs POST Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("❌ POST /api/blogs Error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
 
@@ -134,7 +94,10 @@ export async function GET() {
 
     return NextResponse.json(blogs);
   } catch (err) {
-    console.error("❌ GET /api/blogs:", err);
-    return NextResponse.json({ error: "Fetch failed" }, { status: 500 });
+    console.error("❌ GET /api/blogs Error:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch blogs" },
+      { status: 500 }
+    );
   }
 }

@@ -15,51 +15,32 @@ export default function SubmitBlogPage() {
     e.preventDefault();
 
     if (!url.trim()) {
-      toast.error("Please enter a valid blog URL.");
+      toast.error("🚫 Please enter a valid blog URL.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const blogRes = await fetch("/api/blogs", {
+      // ✅ Submit to unified backend
+      const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blogUrl: url }),
       });
 
-      const blogData = await blogRes.json();
+      const data = await res.json();
 
-      if (!blogRes.ok) {
-        toast.error(`MongoDB Error: ${blogData.error}`);
-        setLoading(false);
+      if (!res.ok) {
+        toast.error(`❌ ${data.error}`);
         return;
       }
 
-      toast.success("🧠 Blog scraped and stored in MongoDB!");
-
-      const summaryRes = await fetch("/api/summaries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          blogUrl: url,
-          blogText: blogData.blogText,
-        }),
-      });
-
-      const summaryData = await summaryRes.json();
-
-      if (!summaryRes.ok) {
-        toast.error(`Supabase Error: ${summaryData.error}`);
-        setLoading(false);
-        return;
-      }
-
-      toast.success("📄 Summary & Urdu saved to Supabase!");
-      setUrl("");
+      toast.success("✅ Blog submitted, summarized, and translated!");
+      setUrl(""); // Clear input after success
     } catch (err) {
-      console.error("Submission error:", err);
-      toast.error("Server error. Please try again.");
+      console.error("💥 Submission error:", err);
+      toast.error("🚨 Server error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -101,7 +82,7 @@ export default function SubmitBlogPage() {
               disabled={loading}
               className="bg-[#0c3baa] dark:bg-[#facc15] dark:text-black hover:opacity-90 transition w-full"
             >
-              {loading ? "Processing..." : "Summarise Blog"}
+              {loading ? "⏳ Processing..." : "🧠 Summarise Blog"}
             </Button>
           </form>
         </CardContent>
