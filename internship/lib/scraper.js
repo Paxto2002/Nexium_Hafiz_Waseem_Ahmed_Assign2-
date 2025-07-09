@@ -17,13 +17,19 @@ export async function scrapeBlogText(url) {
     const $ = cheerio.load(html);
 
     const title = $("title").text().trim();
+
     const content =
       $("article").text().trim() ||
       $(".post-content").text().trim() ||
       $(".blog-post").text().trim() ||
-      $("main").text().trim();
+      $("main").text().trim() ||
+      $("p")
+        .map((_, el) => $(el).text().trim())
+        .get()
+        .filter(Boolean)
+        .join("\n\n");
 
-    console.log("🧾 Extracted content preview:", content.slice(0, 300));
+    console.log("🧾 Content preview:", content.slice(0, 300));
 
     if (!content || content.length < 100) {
       throw new Error("Insufficient blog content extracted.");
