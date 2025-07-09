@@ -7,9 +7,15 @@ import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import { createClient } from "@supabase/supabase-js";
 
-// MongoDB setup
+// MongoDB
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
+
+// Supabase
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 let cachedClient = null;
 async function getMongoClient() {
@@ -19,12 +25,6 @@ async function getMongoClient() {
   cachedClient = client;
   return client;
 }
-
-// Supabase setup
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 // POST: Handle everything in one endpoint
 export async function POST(req) {
@@ -45,25 +45,19 @@ export async function POST(req) {
     let blog = await col.findOne({ blogUrl });
 
     if (!blog) {
+      console.log("📡 Scraping blog:", blogUrl);
+
       const scraped = await scrapeBlogText(blogUrl);
 
+      console.log("📃 Scraped Content:", scraped?.content?.slice(0, 100));
+
       if (!scraped || !scraped.content || scraped.content.length < 100) {
+        console.error("❌ Scraping failed or content too short:", scraped);
         return NextResponse.json(
           { error: "Scraping failed or content too short." },
           { status: 400 }
         );
       }
-
-      const { title, content } = scraped;
-
-      await col.insertOne({
-        blogUrl,
-        blogTitle: title || "Untitled",
-        blogText: content,
-        createdAt: new Date(),
-      });
-
-      blog = { blogUrl, blogTitle: title, blogText: content };
     }
 
     // Generate summary
