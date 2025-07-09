@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model summaries {
+  id         String   @id @default(uuid()) @db.Uuid
+  url        String   @db.Text
+  translated String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("summaries") // maps Prisma model to actual DB table
+}
