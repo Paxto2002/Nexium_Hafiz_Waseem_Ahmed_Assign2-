@@ -26,7 +26,6 @@ async function getMongoClient() {
   return client;
 }
 
-// POST: Handle everything in one endpoint
 export async function POST(req) {
   try {
     const { blogUrl } = await req.json();
@@ -41,12 +40,11 @@ export async function POST(req) {
     const client = await getMongoClient();
     const col = client.db(MONGODB_DB).collection("blogs");
 
-    // Check if blog already exists
     let blog = await col.findOne({ blogUrl });
 
+    // 🟡 Scrape and insert if not exists
     if (!blog) {
       console.log("📡 Scraping blog:", blogUrl);
-
       const scraped = await scrapeBlogText(blogUrl);
 
       console.log("📃 Scraped Content:", scraped?.content?.slice(0, 100));
@@ -58,20 +56,31 @@ export async function POST(req) {
           { status: 400 }
         );
       }
+
+      // ✅ Assign scraped blog correctly
+      blog = {
+        blogUrl,
+        blogTitle: scraped.title || "Untitled",
+        blogText: scraped.content,
+        createdAt: new Date(),
+      };
+
+      await col.insertOne(blog);
     }
 
-    // Generate summary
+    // ✅ Generate Summary and Urdu
     const summary = generateSummary(blog.blogText);
     const translated = translateToUrdu(summary);
 
-    // Save to Supabase
+    // 🟡 Save to Supabase
     const { error: supabaseError } = await supabase.from("summaries").insert({
-      url: blogUrl,
-      summary,
-      translated,
+      blog_url: blogUrl, // match your frontend `.blog_url`
+      summary_en: summary,
+      summary_ur: translated,
     });
 
     if (supabaseError) {
+      console.error("❌ Supabase insert failed:", supabaseError);
       return NextResponse.json(
         { error: "Supabase insert failed: " + supabaseError.message },
         { status: 500 }
