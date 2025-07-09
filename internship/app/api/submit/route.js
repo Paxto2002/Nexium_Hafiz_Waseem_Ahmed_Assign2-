@@ -68,15 +68,15 @@ export async function POST(req) {
       await col.insertOne(blog);
     }
 
-    // ✅ Generate Summary and Urdu
+    // Generate Summary and Urdu
     const summary = generateSummary(blog.blogText);
     const translated = translateToUrdu(summary);
 
-    // 🟡 Save to Supabase
+    // Save to Supabase
     const { error: supabaseError } = await supabase.from("summaries").insert({
-      blog_url: blogUrl, // match your frontend `.blog_url`
-      summary_en: summary,
-      summary_ur: translated,
+      url: blogUrl,
+      summary,
+      translated,
     });
 
     if (supabaseError) {
