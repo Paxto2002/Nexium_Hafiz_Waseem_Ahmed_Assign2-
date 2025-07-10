@@ -4,7 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -31,7 +30,6 @@ export async function GET() {
 
     const { data: summaries } = await supabase.from("summaries").select("*");
 
-    // Combine summaries with blogs
     const enriched = blogs.map((blog) => {
       const match = summaries.find((s) => s.url === blog.blogUrl);
       return {
@@ -43,9 +41,9 @@ export async function GET() {
 
     return NextResponse.json(enriched);
   } catch (err) {
-    console.error("❌ GET /api/all error:", err);
+    console.error("❌ /api/all error:", err.message);
     return NextResponse.json(
-      { error: "Failed to combine blog and summary data" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

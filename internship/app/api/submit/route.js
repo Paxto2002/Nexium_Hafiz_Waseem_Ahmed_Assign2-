@@ -1,5 +1,3 @@
-// app/api/submit/route.js
-
 export const runtime = "nodejs";
 
 import { MongoClient } from "mongodb";
@@ -9,16 +7,15 @@ import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import { createClient } from "@supabase/supabase-js";
 
-// MongoDB
+// Init
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-
-// Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Cached Mongo client
 let cachedClient = null;
 async function getMongoClient() {
   if (cachedClient) return cachedClient;
@@ -31,12 +28,8 @@ async function getMongoClient() {
 export async function POST(req) {
   try {
     const { blogUrl } = await req.json();
-
     if (!/^https?:\/\//.test(blogUrl)) {
-      return NextResponse.json(
-        { error: "Invalid URL format" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid blog URL" }, { status: 400 });
     }
 
     const client = await getMongoClient();
@@ -44,22 +37,13 @@ export async function POST(req) {
 
     let blog = await col.findOne({ blogUrl });
 
-    // 🟡 Scrape and insert if not exists
+    // 🧠 SCRAPE if not found
     if (!blog) {
-      console.log("📡 Scraping blog:", blogUrl);
       const scraped = await scrapeBlogText(blogUrl);
-
-      console.log("📃 Scraped Content:", scraped?.content?.slice(0, 100));
-
-      if (!scraped || !scraped.content || scraped.content.length < 100) {
-        console.error("❌ Scraping failed or content too short:", scraped);
-        return NextResponse.json(
-          { error: "Scraping failed or content too short." },
-          { status: 400 }
-        );
+      if (!scraped) {
+        return NextResponse.json({ error: "Scraping failed" }, { status: 500 });
       }
 
-      // ✅ Assign scraped blog correctly
       blog = {
         blogUrl,
         blogTitle: scraped.title || "Untitled",
@@ -70,41 +54,40 @@ export async function POST(req) {
       await col.insertOne(blog);
     }
 
-    // Generate Summary and Urdu
+    // 🧠 Generate summary + translation
     const summary = generateSummary(blog.blogText);
     const translated = translateToUrdu(summary);
 
-    // Save to Supabase
-    const { error: supabaseError } = await supabase.from("summaries").insert({
-      url: blogUrl,
-      summary,
-      translated,
-    });
+    // 🔁 Check if already in Supabase
+    const { data: existing, error: fetchErr } = await supabase
+      .from("summaries")
+      .select("*")
+      .eq("url", blogUrl)
+      .single();
 
-    if (supabaseError) {
-      console.error("❌ Supabase insert failed:", supabaseError);
-      return NextResponse.json(
-        { error: "Supabase insert failed: " + supabaseError.message },
-        { status: 500 }
-      );
+    if (!existing) {
+      const { error: insertErr } = await supabase.from("summaries").insert({
+        url: blogUrl,
+        summary,
+        translated,
+      });
+
+      if (insertErr) {
+        console.error("❌ Supabase insert failed:", insertErr);
+        return NextResponse.json(
+          { error: "Supabase insert failed: " + insertErr.message },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({
-      message: "✅ Full process complete",
-      blogText: blog.blogText,
+      message: "✅ Blog processed",
       summary,
       translated,
     });
   } catch (err) {
-    console.error("❌ /api/submit error:", {
-      message: err.message,
-      stack: err.stack,
-      full: err,
-    });
-
-    return NextResponse.json(
-      { error: err.message || "Unexpected server error" },
-      { status: 500 }
-    );
+    console.error("❌ /api/submit error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
