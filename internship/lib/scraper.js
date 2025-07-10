@@ -1,6 +1,8 @@
 export async function scrapeBlogText(url) {
   try {
-    const res = await fetch("http://localhost:3000/scrape", {
+    const SCRAPER_API_BASE =
+      process.env.NEXT_PUBLIC_SCRAPER_API_URL || "http://localhost:3000";
+    const res = await fetch(`${SCRAPER_API_BASE}/scrape`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),

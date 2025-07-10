@@ -1,11 +1,3 @@
-import express from "express";
-import cors from "cors";
-import puppeteer from "puppeteer";
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
 app.post("/scrape", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: "Missing URL" });
@@ -17,20 +9,29 @@ app.post("/scrape", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+
+    // Wait for body just to ensure page fully loads
+    await page.waitForSelector("body", { timeout: 10000 });
 
     const { title, content } = await page.evaluate(() => {
       const title = document.title;
-      const container =
+
+      const preferred =
         document.querySelector("article") ||
         document.querySelector("main") ||
         document.querySelector(".post-content") ||
-        document.querySelector(".blog-post");
+        document.querySelector(".blog-post") ||
+        document.querySelector(".blog-content");
 
-      return {
-        title,
-        content: container?.innerText?.trim() || "",
-      };
+      let content = preferred?.innerText?.trim();
+
+      // Fallback to full body if container fails
+      if (!content || content.length < 100) {
+        content = document.body.innerText.trim();
+      }
+
+      return { title, content };
     });
 
     await browser.close();
@@ -45,7 +46,3 @@ app.post("/scrape", async (req, res) => {
     return res.status(500).json({ error: "Scraping failed" });
   }
 });
-
-app.listen(3000, () =>
-  console.log("🚀 Scraper API running on http://localhost:3000")
-);
