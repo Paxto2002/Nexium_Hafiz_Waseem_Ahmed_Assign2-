@@ -59,6 +59,9 @@ importers:
       puppeteer:
         specifier: ^24.11.2
         version: 24.11.2(typescript@5.8.3)
+      puppeteer-core:
+        specifier: ^24.12.1
+        version: 24.12.1
       react:
         specifier: ^19.0.0
         version: 19.1.0
@@ -2132,6 +2135,10 @@ packages:
 
   puppeteer-core@24.11.2:
     resolution: {integrity: sha512-c49WifNb8hix+gQH17TldmD6TC/Md2HBaTJLHexIUq4sZvo2pyHY/Pp25qFQjibksBu/SJRYUY7JsoaepNbiRA==}
+    engines: {node: '>=18'}
+
+  puppeteer-core@24.12.1:
+    resolution: {integrity: sha512-8odp6d3ERKBa3BAVaYWXn95UxQv3sxvP1reD+xZamaX6ed8nCykhwlOiHSaHR9t/MtmIB+rJmNencI6Zy4Gxvg==}
     engines: {node: '>=18'}
 
   puppeteer@24.11.2:
@@ -4700,6 +4707,20 @@ snapshots:
   punycode@2.3.1: {}
 
   puppeteer-core@24.11.2:
+    dependencies:
+      '@puppeteer/browsers': 2.10.5
+      chromium-bidi: 5.1.0(devtools-protocol@0.0.1464554)
+      debug: 4.4.1
+      devtools-protocol: 0.0.1464554
+      typed-query-selector: 2.12.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bare-buffer
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  puppeteer-core@24.12.1:
     dependencies:
       '@puppeteer/browsers': 2.10.5
       chromium-bidi: 5.1.0(devtools-protocol@0.0.1464554)

@@ -43,3 +43,6 @@ next-env.d.ts
 /app/generated/prisma
 
 .env.local
+
+# Ignore all node_modules everywhere
+**/node_modules
