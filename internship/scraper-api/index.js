@@ -1,4 +1,3 @@
-// scraper-api/index.js
 import express from "express";
 import cors from "cors";
 import puppeteer from "puppeteer";
