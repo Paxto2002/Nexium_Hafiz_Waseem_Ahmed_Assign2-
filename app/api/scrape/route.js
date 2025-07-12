@@ -1,86 +1,49 @@
 export const runtime = "nodejs";
 
-import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
 import { NextResponse } from "next/server";
+
+const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 
 export async function POST(req) {
   try {
     const { url } = await req.json();
+
     if (!url || !/^https?:\/\//.test(url)) {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
     }
 
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-      ignoreHTTPSErrors: true,
-    });
+    const apiUrl = `https://api.scraperapi.com/?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(
+      url
+    )}&render=true`;
 
-    const page = await browser.newPage();
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      const blocked = ["image", "stylesheet", "font", "media"];
-      if (blocked.includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-
-    await page.waitForSelector(
-      "main, article, .article-content, .entry-content",
-      { timeout: 10000 }
-    );
-
-    let previousHeight = await page.evaluate(() => document.body.scrollHeight);
-    for (let i = 0; i < 10; i++) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await new Promise((res) => setTimeout(res, 1000));
-      const newHeight = await page.evaluate(() => document.body.scrollHeight);
-      if (newHeight === previousHeight) break;
-      previousHeight = newHeight;
+    const res = await fetch(apiUrl);
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "Failed to fetch from ScraperAPI" },
+        { status: 500 }
+      );
     }
 
-    const content = await page.evaluate(() => {
-      const selectors = [
-        "main",
-        "article",
-        "div[itemprop='articleBody']",
-        ".post-content",
-        ".article-content",
-        ".entry-content",
-        "#article",
-        "#content",
-      ];
-      for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el && el.innerText && el.innerText.length > 200) {
-          return el.innerText;
-        }
-      }
-      return document.body.innerText || "";
-    });
+    const html = await res.text();
 
-    const title = await page.title();
-    await browser.close();
+    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+
+    const title = titleMatch ? titleMatch[1] : "Untitled";
+    const content = bodyMatch
+      ? bodyMatch[1].replace(/<[^>]+>/g, "").slice(0, 2000)
+      : "";
 
     if (!content || content.length < 100) {
       return NextResponse.json(
-        { error: "Content missing or too short" },
-        { status: 400 }
+        { error: "Content too short or not found" },
+        { status: 422 }
       );
     }
 
     return NextResponse.json({ title, content });
   } catch (err) {
-    console.error("❌ Scraper failed:", err);
-    return NextResponse.json(
-      { error: "Scraping failed", details: err.message },
-      { status: 500 }
-    );
+    console.error("ScraperAPI error:", err.message);
+    return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
   }
 }

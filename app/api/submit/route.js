@@ -8,7 +8,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-// ✅ FIXED: Use internal route instead of external HTTPS URL
 const SCRAPER_API_URL = "/api/scrape";
 
 const supabase = createClient(
@@ -26,13 +25,8 @@ async function getMongoClient() {
 }
 
 async function scrapeBlogText(url) {
-  if (!url || !/^https?:\/\//.test(url)) {
-    throw new Error("Invalid URL format");
-  }
-
   for (let i = 0; i < 3; i++) {
     try {
-      // ✅ FIXED: Internal call to avoid SSL loopback
       const res = await fetch(SCRAPER_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
