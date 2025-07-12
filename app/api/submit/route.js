@@ -9,7 +9,8 @@ import { createClient } from "@supabase/supabase-js";
 // ─── Env Setup ─────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-const SCRAPER_API_URL = process.env.SCRAPER_API_URL || "http://localhost:5000";
+const SCRAPER_API_URL =
+  process.env.NEXT_PUBLIC_SCRAPER_API_URL || "http://localhost:5000";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -64,8 +65,8 @@ async function scrapeBlogText(url) {
 // ─── POST Handler ────────────────────────────────────────────
 export async function POST(req) {
   try {
-    const { blogUrl, url } = await req.json();
-    const finalUrl = blogUrl || url;
+    const body = await req.json();
+    const finalUrl = body.url || body.blogUrl;
 
     if (!/^https?:\/\//.test(finalUrl)) {
       return NextResponse.json({ error: "Invalid blog URL" }, { status: 400 });
