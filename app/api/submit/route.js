@@ -6,15 +6,17 @@ import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import { createClient } from "@supabase/supabase-js";
 
+// ENV
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-const SCRAPER_API_URL = "/api/scrape";
+const SCRAPER_API_URL = process.env.SCRAPER_API_FULL_URL;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Cached MongoClient
 let cachedClient = null;
 async function getMongoClient() {
   if (cachedClient) return cachedClient;
@@ -24,9 +26,15 @@ async function getMongoClient() {
   return client;
 }
 
+// Scrape logic
 async function scrapeBlogText(url) {
+  if (!SCRAPER_API_URL) {
+    throw new Error("SCRAPER_API_URL is not defined in environment variables");
+  }
+
   for (let i = 0; i < 3; i++) {
     try {
+      console.log("🚀 Fetching from:", SCRAPER_API_URL);
       const res = await fetch(SCRAPER_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -53,6 +61,7 @@ async function scrapeBlogText(url) {
   throw new Error("All scrape attempts failed");
 }
 
+// POST handler
 export async function POST(req) {
   try {
     const body = await req.json();
