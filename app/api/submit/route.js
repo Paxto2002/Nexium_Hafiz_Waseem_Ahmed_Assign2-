@@ -64,9 +64,10 @@ async function scrapeBlogText(url) {
 // ─── POST Handler ────────────────────────────────────────────
 export async function POST(req) {
   try {
-    const { blogUrl } = await req.json();
+    const { blogUrl, url } = await req.json();
+    const finalUrl = blogUrl || url;
 
-    if (!/^https?:\/\//.test(blogUrl)) {
+    if (!/^https?:\/\//.test(finalUrl)) {
       return NextResponse.json({ error: "Invalid blog URL" }, { status: 400 });
     }
 
@@ -74,14 +75,14 @@ export async function POST(req) {
     const col = client.db(MONGODB_DB).collection("blogs");
 
     // ─── Check MongoDB ──────────────────────────────────────
-    let blog = await col.findOne({ blogUrl });
+    let blog = await col.findOne({ blogUrl: finalUrl });
 
     if (!blog) {
       // 🧠 Scrape if not found
-      const scraped = await scrapeBlogText(blogUrl);
+      const scraped = await scrapeBlogText(finalUrl);
 
       blog = {
-        blogUrl,
+        blogUrl: finalUrl,
         blogTitle: scraped.title || "Untitled",
         blogText: scraped.content,
         createdAt: new Date(),
@@ -95,15 +96,15 @@ export async function POST(req) {
     const translated = translateToUrdu(summary);
 
     // ─── Save to Supabase if not already ───────────────────
-    const { data: existing, error: fetchErr } = await supabase
+    const { data: existing } = await supabase
       .from("summaries")
       .select("*")
-      .eq("url", blogUrl)
+      .eq("url", finalUrl)
       .single();
 
     if (!existing) {
       const { error: insertErr } = await supabase.from("summaries").insert({
-        url: blogUrl,
+        url: finalUrl,
         summary,
         translated,
       });
