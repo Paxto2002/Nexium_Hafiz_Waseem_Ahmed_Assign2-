@@ -13,14 +13,15 @@ export async function POST(req) {
 
     const browser = await puppeteer.launch({
       args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
-      ignoreHTTPSErrors: true, // ✅ Critical for fixing SSL error 80
+      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
 
-    // 🚫 Block heavy resources for performance
+    // 🚫 Block heavy resources to improve performance
     await page.setRequestInterception(true);
     page.on("request", (req) => {
       const blocked = ["image", "stylesheet", "font", "media"];
@@ -33,28 +34,26 @@ export async function POST(req) {
 
     const start = Date.now();
 
-    // ⏳ Navigate to the page
+    // ⏳ Go to blog URL
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
 
-    // 🧠 Wait for likely article selectors to be present
+    // 🧠 Wait for common blog content containers
     await page.waitForSelector(
       "main, article, .article-content, .entry-content",
-      {
-        timeout: 10000,
-      }
+      { timeout: 10000 }
     );
 
-    // 🔄 Scroll to bottom for lazy-loaded content
+    // 🔄 Scroll to bottom to load dynamic content (no a.waitForTimeout here!)
     let previousHeight = await page.evaluate(() => document.body.scrollHeight);
     for (let i = 0; i < 10; i++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(1000);
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // ⬅️ plain JS timeout
       const newHeight = await page.evaluate(() => document.body.scrollHeight);
       if (newHeight === previousHeight) break;
       previousHeight = newHeight;
     }
 
-    // 📄 Extract readable content from known blog containers
+    // 📄 Try extracting main content
     const content = await page.evaluate(() => {
       const selectors = [
         "main",
