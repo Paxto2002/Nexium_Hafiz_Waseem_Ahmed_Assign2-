@@ -6,7 +6,7 @@ import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import { createClient } from "@supabase/supabase-js";
 
-// ENV
+// Load environment variables
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
 const SCRAPER_API_URL = process.env.SCRAPER_API_FULL_URL;
@@ -16,7 +16,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Cached MongoClient
+// Cached MongoClient for reuse
 let cachedClient = null;
 async function getMongoClient() {
   if (cachedClient) return cachedClient;
@@ -26,15 +26,17 @@ async function getMongoClient() {
   return client;
 }
 
-// Scrape logic
+// Blog scraping logic
 async function scrapeBlogText(url) {
-  if (!SCRAPER_API_URL) {
-    throw new Error("SCRAPER_API_URL is not defined in environment variables");
+  if (!SCRAPER_API_URL || !SCRAPER_API_URL.startsWith("/")) {
+    throw new Error(
+      "SCRAPER_API_URL must be a relative path like '/api/scrape'"
+    );
   }
 
   for (let i = 0; i < 3; i++) {
     try {
-      console.log("🚀 Fetching from:", SCRAPER_API_URL);
+      console.log(`🧠 Attempting to scrape: ${url}`);
       const res = await fetch(SCRAPER_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,10 +45,13 @@ async function scrapeBlogText(url) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Scraper failed (${res.status})`);
+        throw new Error(
+          errData.error || `Scraper failed with status ${res.status}`
+        );
       }
 
       const { title, content } = await res.json();
+
       if (!content || content.length < 100) {
         throw new Error("Scraped content too short or missing");
       }
@@ -61,7 +66,7 @@ async function scrapeBlogText(url) {
   throw new Error("All scrape attempts failed");
 }
 
-// POST handler
+// Main POST handler
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -112,7 +117,7 @@ export async function POST(req) {
     }
 
     return NextResponse.json({
-      message: "✅ Blog processed",
+      message: "✅ Blog processed successfully!",
       summary,
       translated,
     });
