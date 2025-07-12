@@ -1,7 +1,7 @@
 export const runtime = "nodejs"; // Required for Puppeteer on Vercel
 
 import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium-min";
+import chromium from "@sparticuz/chromium";
 import { NextResponse } from "next/server";
 
 export async function POST(req) {
