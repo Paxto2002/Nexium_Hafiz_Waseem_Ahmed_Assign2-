@@ -1,4 +1,4 @@
-export const runtime = "nodejs"; // Required for Puppeteer on Vercel
+export const runtime = "nodejs";
 
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
@@ -7,7 +7,6 @@ import { NextResponse } from "next/server";
 export async function POST(req) {
   try {
     const { url } = await req.json();
-
     if (!url || !/^https?:\/\//.test(url)) {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
     }
@@ -20,7 +19,6 @@ export async function POST(req) {
     });
 
     const page = await browser.newPage();
-
     await page.setRequestInterception(true);
     page.on("request", (req) => {
       const blocked = ["image", "stylesheet", "font", "media"];
@@ -31,8 +29,6 @@ export async function POST(req) {
       }
     });
 
-    const start = Date.now();
-
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
 
     await page.waitForSelector(
@@ -40,11 +36,10 @@ export async function POST(req) {
       { timeout: 10000 }
     );
 
-    // Scroll for lazy-loaded content
     let previousHeight = await page.evaluate(() => document.body.scrollHeight);
     for (let i = 0; i < 10; i++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((res) => setTimeout(res, 1000));
       const newHeight = await page.evaluate(() => document.body.scrollHeight);
       if (newHeight === previousHeight) break;
       previousHeight = newHeight;
@@ -72,10 +67,6 @@ export async function POST(req) {
 
     const title = await page.title();
     await browser.close();
-
-    console.log(`⏱️ Scraped ${url} in ${Date.now() - start}ms`);
-    console.log(`📄 Content length: ${content.length}`);
-    console.log(`📃 Title: ${title}`);
 
     if (!content || content.length < 100) {
       return NextResponse.json(

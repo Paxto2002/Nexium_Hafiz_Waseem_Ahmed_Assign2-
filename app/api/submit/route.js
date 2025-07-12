@@ -6,18 +6,15 @@ import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── Env Setup ─────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
-const SCRAPER_API_URL =
-  process.env.NEXT_PUBLIC_SCRAPER_API_URL || "http://localhost:5000";
+const SCRAPER_API_URL = process.env.NEXT_PUBLIC_SCRAPER_API_URL;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// ─── Mongo Client Cache ─────────────────────────────────────
 let cachedClient = null;
 async function getMongoClient() {
   if (cachedClient) return cachedClient;
@@ -27,7 +24,6 @@ async function getMongoClient() {
   return client;
 }
 
-// ─── Scrape Blog Function With Retry ────────────────────────
 async function scrapeBlogText(url) {
   if (!url || !/^https?:\/\//.test(url)) {
     throw new Error("Invalid URL format");
@@ -35,7 +31,7 @@ async function scrapeBlogText(url) {
 
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(`${SCRAPER_API_URL}/scrape`, {
+      const res = await fetch(SCRAPER_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -47,7 +43,6 @@ async function scrapeBlogText(url) {
       }
 
       const { title, content } = await res.json();
-
       if (!content || content.length < 100) {
         throw new Error("Scraped content too short or missing");
       }
@@ -62,7 +57,6 @@ async function scrapeBlogText(url) {
   throw new Error("All scrape attempts failed");
 }
 
-// ─── POST Handler ────────────────────────────────────────────
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -75,28 +69,22 @@ export async function POST(req) {
     const client = await getMongoClient();
     const col = client.db(MONGODB_DB).collection("blogs");
 
-    // ─── Check MongoDB ──────────────────────────────────────
     let blog = await col.findOne({ blogUrl: finalUrl });
 
     if (!blog) {
-      // 🧠 Scrape if not found
       const scraped = await scrapeBlogText(finalUrl);
-
       blog = {
         blogUrl: finalUrl,
         blogTitle: scraped.title || "Untitled",
         blogText: scraped.content,
         createdAt: new Date(),
       };
-
       await col.insertOne(blog);
     }
 
-    // 🧠 Generate summary & translation
     const summary = generateSummary(blog.blogText);
     const translated = translateToUrdu(summary);
 
-    // ─── Save to Supabase if not already ───────────────────
     const { data: existing } = await supabase
       .from("summaries")
       .select("*")
@@ -111,7 +99,6 @@ export async function POST(req) {
       });
 
       if (insertErr) {
-        console.error("❌ Supabase insert failed:", insertErr);
         return NextResponse.json(
           { error: "Supabase insert failed: " + insertErr.message },
           { status: 500 }
