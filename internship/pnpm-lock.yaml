@@ -23,6 +23,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.2.3
         version: 1.2.3(react@19.1.0)
+      '@sparticuz/chromium-min':
+        specifier: ^138.0.1
+        version: 138.0.1
       '@supabase/supabase-js':
         specifier: ^2.50.3
         version: 2.50.3
@@ -508,6 +511,10 @@ packages:
 
   '@rushstack/eslint-patch@1.12.0':
     resolution: {integrity: sha512-5EwMtOqvJMMa3HbmxLlF74e+3/HhwBTMcvt3nqVJgGCozO6hzIPOBlwm8mGVNR9SN2IJpxSnlxczyDjcn7qIyw==}
+
+  '@sparticuz/chromium-min@138.0.1':
+    resolution: {integrity: sha512-Jlwk7tpeMVfjBbqJbcQSYr+OrrwpIGP67gNK5RLkNIuTUNkxW4dmU6fKGsnN3/mLyjzTwEPC1TsZnPGjCoUOGg==}
+    engines: {node: '>=20.11.0'}
 
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
@@ -2903,6 +2910,14 @@ snapshots:
   '@rtsao/scc@1.1.0': {}
 
   '@rushstack/eslint-patch@1.12.0': {}
+
+  '@sparticuz/chromium-min@138.0.1':
+    dependencies:
+      follow-redirects: 1.15.9
+      tar-fs: 3.1.0
+    transitivePeerDependencies:
+      - bare-buffer
+      - debug
 
   '@standard-schema/utils@0.3.0': {}
 
