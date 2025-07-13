@@ -1,3 +1,5 @@
+// app/api/blogdata/route.js
+
 import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
 import clientPromise from "@/lib/mongodb";
@@ -11,17 +13,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 export async function POST(req) {
   try {
     const { blogUrl } = await req.json();
-    if (!blogUrl)
+
+    if (!blogUrl) {
       return NextResponse.json({ error: "Missing blogUrl" }, { status: 400 });
+    }
 
     const filename = extractFilename(blogUrl);
-
-    // MongoDB
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB);
-    const mongoDoc = await db.collection("blogs").findOne({ blogUrl });
 
-    // Supabase
+    const mongoDoc = await db.collection("blogs").findOne({ blogUrl });
     const { data: supaData } = await supabase
       .from("summaries")
       .select("*")
@@ -40,14 +41,15 @@ export async function POST(req) {
       });
     }
 
-    // Static JSON from public folder (via fetch)
-    const fileUrl = `${
-      process.env.NEXT_PUBLIC_SITE_URL || "https://blogtalkhees.vercel.app"
-    }/static-blogs/${filename}.json`;
-    const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error("Static blog JSON not found");
-    const json = await res.json();
+    // Static JSON from public
+    const site =
+      process.env.NEXT_PUBLIC_SITE_URL || "https://blogtalkhees.vercel.app";
+    const staticUrl = `${site}/static-blogs/${filename}.json`;
 
+    const res = await fetch(staticUrl);
+    if (!res.ok) throw new Error("Blog file not found in public");
+
+    const json = await res.json();
     const summary = generateSummary(json.text);
     const translation = translateToUrdu(summary, json.title);
 
