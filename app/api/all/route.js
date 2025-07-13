@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { translateToUrdu } from "@/lib/translateToUrdu"; // ✅ import it
+import { translateToUrdu } from "@/lib/translateToUrdu";
 
 export async function GET() {
   try {
