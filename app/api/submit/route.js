@@ -1,128 +1,77 @@
-export const runtime = "nodejs";
-
-import { MongoClient } from "mongodb";
-import { NextResponse } from "next/server";
 import { generateSummary } from "@/lib/generateSummary";
 import { translateToUrdu } from "@/lib/translateToUrdu";
-import { createClient } from "@supabase/supabase-js";
+import clientPromise from "@/lib/mongodb";
+import path from "path";
+import { readFile } from "fs/promises";
 
-// Load environment variables
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_DB = process.env.MONGODB_DB;
-const SCRAPER_API_URL = process.env.SCRAPER_API_FULL_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-// Cached MongoClient for reuse
-let cachedClient = null;
-async function getMongoClient() {
-  if (cachedClient) return cachedClient;
-  const client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  cachedClient = client;
-  return client;
-}
-
-// Blog scraping logic
-async function scrapeBlogText(url) {
-  if (!SCRAPER_API_URL || !SCRAPER_API_URL.startsWith("/")) {
-    throw new Error(
-      "SCRAPER_API_URL must be a relative path like '/api/scrape'"
-    );
-  }
-
-  for (let i = 0; i < 3; i++) {
-    try {
-      console.log(`🧠 Attempting to scrape: ${url}`);
-      const res = await fetch(SCRAPER_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.error || `Scraper failed with status ${res.status}`
-        );
-      }
-
-      const { title, content } = await res.json();
-
-      if (!content || content.length < 100) {
-        throw new Error("Scraped content too short or missing");
-      }
-
-      return { title, content };
-    } catch (err) {
-      console.warn(`⚠️ Scrape attempt ${i + 1} failed: ${err.message}`);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  }
-
-  throw new Error("All scrape attempts failed");
-}
-
-// Main POST handler
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const finalUrl = body.url || body.blogUrl;
+    const { blogUrl } = await req.json();
+    const filename = extractFilename(blogUrl);
+    const blogPath = path.join(
+      process.cwd(),
+      "data",
+      "static-blogs",
+      `${filename}.json`
+    );
 
-    if (!/^https?:\/\//.test(finalUrl)) {
-      return NextResponse.json({ error: "Invalid blog URL" }, { status: 400 });
-    }
+    // Load static blog JSON
+    const raw = await readFile(blogPath, "utf-8");
+    const staticData = JSON.parse(raw);
 
-    const client = await getMongoClient();
-    const col = client.db(MONGODB_DB).collection("blogs");
+    // Generate summary from text
+    const summary = generateSummary(staticData.text);
 
-    let blog = await col.findOne({ blogUrl: finalUrl });
+    // Urdu translation from JS dictionary (based on blog title as topic)
+    const translated = translateToUrdu(summary, staticData.title);
 
-    if (!blog) {
-      const scraped = await scrapeBlogText(finalUrl);
-      blog = {
-        blogUrl: finalUrl,
-        blogTitle: scraped.title || "Untitled",
-        blogText: scraped.content,
-        createdAt: new Date(),
-      };
-      await col.insertOne(blog);
-    }
+    // Save full blog text in MongoDB
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB);
+    await db.collection("blogs").insertOne({
+      blogUrl: staticData.url,
+      blogTitle: staticData.title,
+      blogText: staticData.text,
+      createdAt: new Date(),
+    });
 
-    const summary = generateSummary(blog.blogText);
-    const translated = translateToUrdu(summary);
+    // Save summary + translation to Supabase
+    await fetch(`${SUPABASE_URL}/rest/v1/summaries`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        blog_url: staticData.url,
+        summary_en: summary,
+        summary_ur: translated,
+      }),
+    });
 
-    const { data: existing } = await supabase
-      .from("summaries")
-      .select("*")
-      .eq("url", finalUrl)
-      .single();
-
-    if (!existing) {
-      const { error: insertErr } = await supabase.from("summaries").insert({
-        url: finalUrl,
-        summary,
-        translated,
-      });
-
-      if (insertErr) {
-        return NextResponse.json(
-          { error: "Supabase insert failed: " + insertErr.message },
-          { status: 500 }
-        );
-      }
-    }
-
-    return NextResponse.json({
-      message: "✅ Blog processed successfully!",
+    // Return the full response
+    return Response.json({
+      ...staticData,
       summary,
-      translated,
+      translation: translated,
     });
   } catch (err) {
-    console.error("❌ /api/submit error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("❌ submit error:", err.message);
+    return new Response(JSON.stringify({ error: "Processing failed" }), {
+      status: 500,
+    });
   }
+}
+
+function extractFilename(url) {
+  return url
+    .split("/")
+    .pop()
+    .replace(".html", "")
+    .replace(/[^a-zA-Z0-9-_]/g, "");
 }

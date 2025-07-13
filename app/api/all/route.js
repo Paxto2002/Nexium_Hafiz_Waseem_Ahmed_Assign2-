@@ -1,50 +1,37 @@
-import { NextResponse } from "next/server";
-import { MongoClient } from "mongodb";
-import { createClient } from "@supabase/supabase-js";
-
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_DB = process.env.MONGODB_DB;
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-let cachedClient = null;
-async function getMongoClient() {
-  if (cachedClient) return cachedClient;
-  const client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  cachedClient = client;
-  return client;
-}
+import fs from "fs/promises";
+import path from "path";
+import { translateToUrdu } from "@/lib/translateToUrdu"; // ✅ import it
 
 export async function GET() {
   try {
-    const client = await getMongoClient();
-    const blogs = await client
-      .db(MONGODB_DB)
-      .collection("blogs")
-      .find()
-      .sort({ createdAt: -1 })
-      .toArray();
+    const blogDir = path.join(process.cwd(), "data", "static-blogs");
+    const files = await fs.readdir(blogDir);
 
-    const { data: summaries } = await supabase.from("summaries").select("*");
+    const blogs = await Promise.all(
+      files.map(async (filename) => {
+        const filePath = path.join(blogDir, filename);
+        const raw = await fs.readFile(filePath, "utf-8");
+        const json = JSON.parse(raw);
 
-    const enriched = blogs.map((blog) => {
-      const match = summaries.find((s) => s.url === blog.blogUrl);
-      return {
-        ...blog,
-        summary_en: match?.summary ?? null,
-        summary_ur: match?.translated ?? null,
-      };
-    });
+        // Generate Urdu translation based on blog title
+        const summary = json.summary || "No summary available";
+        const translation = translateToUrdu(summary, json.title);
 
-    return NextResponse.json(enriched);
-  } catch (err) {
-    console.error("❌ /api/all error:", err.message);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+        return {
+          url: json.url || `missing-url-${filename}`,
+          title: json.title || "Untitled",
+          text: json.text || "",
+          summary,
+          translation,
+        };
+      })
     );
+
+    return Response.json(blogs);
+  } catch (err) {
+    console.error("❌ Error reading static blogs:", err.message);
+    return new Response(JSON.stringify({ error: "Failed to load blogs" }), {
+      status: 500,
+    });
   }
 }

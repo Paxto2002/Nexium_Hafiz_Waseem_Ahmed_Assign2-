@@ -1,50 +1,82 @@
 "use client";
 
-import React, { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function SubmitBlogPage() {
   const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [selectedBlogData, setSelectedBlogData] = useState(null);
+  const [notFound, setNotFound] = useState(false);
+  const [allBlogs, setAllBlogs] = useState([]);
+  const [loadingBlogs, setLoadingBlogs] = useState(true);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Load blog options from static list
+  useEffect(() => {
+    const fetchBlogs = async () => {
+      try {
+        const res = await fetch("/api/all");
+        if (!res.ok) throw new Error("Failed to load blogs");
+        const data = await res.json();
 
-    // ✅ Basic client-side check
-    if (!url.trim() || !/^https?:\/\//.test(url.trim())) {
-      toast.error("🚫 Please enter a valid blog URL starting with http:// or https://");
-      return;
-    }
+        const seen = new Set();
+        const unique = data.filter((b) => {
+          if (seen.has(b.url)) return false;
+          seen.add(b.url);
+          return true;
+        });
 
-    setLoading(true);
-    console.log("📤 Submitting blog URL:", url);
+        setAllBlogs(unique);
+      } catch (err) {
+        console.error("❌ Blog fetch error:", err);
+        toast.error("❌ Failed to load blog list.");
+      } finally {
+        setLoadingBlogs(false);
+      }
+    };
+    fetchBlogs();
+  }, []);
+
+  // Load blog from MongoDB/Supabase when selected
+  const handleSelect = async (val) => {
+    setUrl(val);
+    setSelectedBlogData(null);
+    setNotFound(false);
+    setSaveSuccess(false);
 
     try {
-      const res = await fetch("/api/submit", {
+      const res = await fetch("/api/blogdata", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blogUrl: url.trim() }),
+        body: JSON.stringify({ blogUrl: val }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        console.error("❌ Server response error:", data);
-        toast.error(`❌ ${data.error || "Failed to submit blog."}`);
+        setNotFound(true);
+        toast.error("❌ Blog not found.");
         return;
       }
 
-      toast.success("✅ Blog submitted, summarized, and translated!");
-      setUrl(""); // Clear input after success
+      const data = await res.json();
+      setSelectedBlogData(data);
+      setSaveSuccess(true);
+      toast.success("✅ Saved: Full text → MongoDB | Summary + Urdu → Supabase");
+
+      // Reset animation after delay
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
-      console.error("💥 Submission error:", err);
-      toast.error("🚨 Server error. Please try again.");
-    } finally {
-      setLoading(false);
+      console.error("❌ API Error:", err);
+      toast.error("Server error.");
     }
   };
 
@@ -52,43 +84,95 @@ export default function SubmitBlogPage() {
     <main className="px-6 py-12 max-w-2xl mx-auto text-[#0c3baa] dark:text-[#e2e8f0]">
       <section className="text-center space-y-3 mb-10">
         <h1 className="text-4xl font-bold font-short-stack text-[#0c3baa] dark:text-[#facc15]">
-          Submit a Blog
+          View Blog Summary
         </h1>
         <p className="text-gray-600 dark:text-gray-300">
-          Paste a blog URL below to generate a summary in Urdu.
+          Choose a blog to preview its full content, summary, and Urdu translation.
         </p>
       </section>
 
       <Card className="bg-[#f4f6f9] dark:bg-[#1e293b] shadow-lg">
         <CardHeader>
           <CardTitle className="text-[#b99400] dark:text-[#facc15] text-lg">
-            Blog URL
+            Select Blog
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="url">Enter Blog URL:</Label>
-              <Input
-                type="url"
-                id="url"
-                placeholder="https://example.com/blog-post"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                required
-              />
-            </div>
+        <CardContent className="space-y-4">
+          <Select onValueChange={handleSelect}>
+            <SelectTrigger className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-sm">
+              <SelectValue placeholder="👇 Choose a blog..." />
+            </SelectTrigger>
+            <SelectContent>
+              {allBlogs.map((blog) => (
+                <SelectItem key={blog.url} value={blog.url}>
+                  <div>
+                    <p className="font-medium">{blog.title}</p>
+                    <p className="text-xs text-muted-foreground">{blog.url}</p>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-[#0c3baa] dark:bg-[#facc15] dark:text-black hover:opacity-90 transition w-full"
-            >
-              {loading ? "⏳ Processing..." : "🧠 Summarise Blog"}
-            </Button>
-          </form>
+          <AnimatePresence>
+            {saveSuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.4 }}
+              >
+                <p className="text-green-600 dark:text-green-400 font-semibold text-sm text-center">
+                  ✅ Full text saved to MongoDB & summary+translation saved to Supabase!
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
+
+      {selectedBlogData && (
+        <Card className="mt-10 bg-white dark:bg-[#1e293b] shadow-md">
+          <CardHeader>
+            <CardTitle className="text-[#0c3baa] dark:text-[#facc15]">
+              {selectedBlogData.title}
+            </CardTitle>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{selectedBlogData.url}</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="font-semibold text-md text-[#b99400]">📄 Full Blog Text:</h3>
+              <p className="text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-200">
+                {selectedBlogData.text}
+              </p>
+            </div>
+            <Separator />
+            <div>
+              <h3 className="font-semibold text-md text-[#b99400]">🧠 Summary:</h3>
+              <p className="text-sm">{selectedBlogData.summary}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-md text-[#b99400]">🌐 Urdu Translation:</h3>
+              <p className="text-sm font-nastaliq">{selectedBlogData.translation}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {notFound && (
+        <Card className="mt-10 bg-white dark:bg-[#1e293b] border border-red-500">
+          <CardHeader>
+            <CardTitle className="text-red-600 dark:text-red-400">
+              🚫 Blog Not Found
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-700 dark:text-gray-300">
+              This blog was not found in databases or local files.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }
