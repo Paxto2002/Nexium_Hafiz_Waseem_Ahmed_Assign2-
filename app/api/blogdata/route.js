@@ -6,11 +6,12 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 
-// Supabase setup
+// ✅ Supabase Setup
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ✅ Main POST Handler
 export async function POST(req) {
   try {
     const { blogUrl } = await req.json();
@@ -21,12 +22,12 @@ export async function POST(req) {
 
     const filename = extractFilename(blogUrl);
 
-    // Step 1: Check MongoDB
+    // 🔍 1. Check MongoDB
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB);
     const mongoDoc = await db.collection("blogs").findOne({ blogUrl });
 
-    // Step 2: Check Supabase
+    // 🔍 2. Check Supabase
     const { data: supaData } = await supabase
       .from("summaries")
       .select("*")
@@ -35,32 +36,33 @@ export async function POST(req) {
       .limit(1)
       .maybeSingle();
 
-    // ✅ If both found, return from databases
+    // ✅ 3. Return if found in both
     if (mongoDoc && supaData) {
       return NextResponse.json({
         title: mongoDoc.blogTitle,
         url: blogUrl,
         text: mongoDoc.blogText,
         summary: supaData.summary,
-        translation: supaData.translated, // 🟢 correct key from Supabase
+        translation: supaData.translated,
       });
     }
 
-    // Step 3: Load static fallback
+    // 📂 4. Load from static JSON
     const filePath = path.join(
       process.cwd(),
       "data",
       "static-blogs",
       `${filename}.json`
     );
+
     const raw = await readFile(filePath, "utf-8");
     const json = JSON.parse(raw);
 
-    // Step 4: Generate summary & translation
+    // 🧠 5. Generate summary + Urdu
     const summary = generateSummary(json.text);
     const translation = translateToUrdu(summary, json.title);
 
-    // Step 5: Save to MongoDB (repeat allowed)
+    // 💾 6. Save to MongoDB (repeat allowed)
     await db.collection("blogs").insertOne({
       blogUrl: json.url,
       blogTitle: json.title,
@@ -68,22 +70,20 @@ export async function POST(req) {
       createdAt: new Date(),
     });
 
-    // Step 6: Save to Supabase with correct keys
-    const { data: supaInsert, error: supaErr } = await supabase
-      .from("summaries")
-      .insert({
-        url: json.url,
-        summary,
-        translated: translation, // ✅ Correct column name
-      });
+    // 💾 7. Save to Supabase (repeat allowed)
+    const { error: supaErr } = await supabase.from("summaries").insert({
+      url: json.url,
+      summary,
+      translated: translation,
+    });
 
     if (supaErr) {
       console.error("❌ Supabase insert failed:", supaErr.message);
     } else {
-      console.log("✅ Supabase insert success:", supaInsert);
+      console.log("✅ Supabase insert success");
     }
 
-    // Step 7: Return complete response
+    // ✅ 8. Return Response
     return NextResponse.json({
       title: json.title,
       url: json.url,
@@ -92,7 +92,7 @@ export async function POST(req) {
       translation,
     });
   } catch (err) {
-    console.error("❌ /api/blogdata error:", err);
+    console.error("❌ /api/blogdata error:", err.message || err);
     return NextResponse.json(
       { error: "Failed to process blog data" },
       { status: 500 }
@@ -100,7 +100,7 @@ export async function POST(req) {
   }
 }
 
-// 🔧 Extract filename from blog URL
+// 🔧 Helper — normalize URL to filename
 function extractFilename(url) {
   return url
     .split("/")
